@@ -413,7 +413,7 @@ export default function RoomPage() {
               Take a Seat
             </button>
           )}
-          {isSeated && !showBuyIn && table && (() => {
+          {isSeated && !showBuyIn && table && table.status !== 'playing' && (() => {
             const mySeatStack = seats.find((s) => s.user_id === myProfile?.id)?.stack ?? 1
             return mySeatStack === 0 ? (
               <button

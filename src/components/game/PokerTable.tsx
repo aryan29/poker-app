@@ -157,10 +157,14 @@ export function PokerTable({ gameState, seats, myUserId, hostId, onStartGame, ta
           const isCurrentPlayer = game?.current_player_id === seat?.user_id;
           const isDealer = game?.dealer_seat === seatNumber;
           const isMe = seat?.user_id === myUserId;
-
-          // For other players, find their hand status from seats (we don't have all hands client-side)
-          // We show folded status only for my hand; others show as playing
           const myHand = isMe ? gameState?.myHand ?? null : null;
+
+          // Derive folded status for all players from game actions
+          const isFolded = seat
+            ? (gameState?.actions ?? []).some(
+                (a) => a.user_id === seat.user_id && a.action === 'fold'
+              )
+            : false;
 
           return (
             <div
@@ -180,6 +184,7 @@ export function PokerTable({ gameState, seats, myUserId, hostId, onStartGame, ta
                 isDealer={isDealer}
                 isMe={isMe}
                 myHand={myHand}
+                isFolded={isFolded}
                 isSB={game?.phase !== 'waiting' && sbSeat === seatNumber}
                 isBB={game?.phase !== 'waiting' && bbSeat === seatNumber}
               />
