@@ -194,6 +194,7 @@ export default function RoomPage() {
   const [abandoning, setAbandoning] = useState(false)
   const [handWinners, setHandWinners] = useState<WinnerResult[] | null>(null)
   const [handLosers, setHandLosers] = useState<Array<{ userId: string; amount: number }> | null>(null)
+  const [handPlayerCards, setHandPlayerCards] = useState<Record<string, string[]> | null>(null)
   const firstLoadDone = useRef(false)
 
   const supabase = createClient()
@@ -206,6 +207,7 @@ export default function RoomPage() {
     if (result && result.winners.length > 0) {
       setHandWinners(result.winners)
       setHandLosers(result.losers)
+      setHandPlayerCards(result.playerCards)
     }
   }
 
@@ -247,6 +249,7 @@ export default function RoomPage() {
           if (result && result.winners.length > 0) {
             setHandWinners(result.winners)
             setHandLosers(result.losers)
+            setHandPlayerCards(result.playerCards)
           }
         })
       }
@@ -381,6 +384,7 @@ export default function RoomPage() {
             hostId={table?.host_id}
             onStartGame={startGame}
             tableCode={code}
+            showdownCards={handPlayerCards ?? undefined}
           />
 
           {gameState && myProfile && (
@@ -467,11 +471,13 @@ export default function RoomPage() {
         <GameResultModal
           winners={handWinners}
           losers={handLosers ?? []}
+          playerCards={handPlayerCards ?? {}}
           seats={(seats as Array<{ user_id: string; profile: { display_name: string } }>)}
           isHost={!!(table && myProfile && table.host_id === myProfile.id)}
           onPlayAgain={async () => {
             setHandWinners(null)
             setHandLosers(null)
+            setHandPlayerCards(null)
             try {
               await startGame()
             } catch {
@@ -481,6 +487,7 @@ export default function RoomPage() {
           onDismiss={() => {
             setHandWinners(null)
             setHandLosers(null)
+            setHandPlayerCards(null)
           }}
         />
       )}

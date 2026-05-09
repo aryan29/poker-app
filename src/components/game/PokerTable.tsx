@@ -12,6 +12,7 @@ interface Props {
   hostId?: string;
   onStartGame: () => void | Promise<void>;
   tableCode: string;
+  showdownCards?: Record<string, string[]>;
 }
 
 // Oval seat positions (percentage of container), 9 seats
@@ -27,7 +28,7 @@ const SEAT_POSITIONS = [
   { top: '78%', left: '82%' },   // Seat 9 — bottom right
 ];
 
-export function PokerTable({ gameState, seats, myUserId, hostId, onStartGame, tableCode }: Props) {
+export function PokerTable({ gameState, seats, myUserId, hostId, onStartGame, tableCode, showdownCards }: Props) {
   const [startError, setStartError] = useState<string | null>(null);
   const game = gameState?.game;
   const isHost = myUserId && hostId && myUserId === hostId;
@@ -185,6 +186,7 @@ export function PokerTable({ gameState, seats, myUserId, hostId, onStartGame, ta
                 isMe={isMe}
                 myHand={myHand}
                 isFolded={isFolded}
+                revealedCards={seat && showdownCards ? showdownCards[seat.user_id] : undefined}
                 isSB={game?.phase !== 'waiting' && sbSeat === seatNumber}
                 isBB={game?.phase !== 'waiting' && bbSeat === seatNumber}
               />

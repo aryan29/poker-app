@@ -158,7 +158,7 @@ export function useGameState(tableCode: string) {
   }, [tableCode, fetchGameState, supabase]);
 
   const sendAction = useCallback(
-    async (action: ActionType, amount?: number): Promise<{ winners: WinnerResult[]; losers: Array<{ userId: string; amount: number }> } | null> => {
+    async (action: ActionType, amount?: number): Promise<{ winners: WinnerResult[]; losers: Array<{ userId: string; amount: number }>; playerCards: Record<string, string[]> } | null> => {
       if (!gameState) throw new Error('No active game');
       let res: Response;
       try {
@@ -177,20 +177,28 @@ export function useGameState(tableCode: string) {
       const json = await res.json().catch(() => ({}));
       // Immediately refresh game state instead of waiting for realtime subscription
       await fetchGameState();
-      // Return winners+losers if this action ended the hand
+      // Return winners+losers+playerCards if this action ended the hand
       if (!json.winners) return null;
-      return { winners: json.winners as WinnerResult[], losers: (json.losers ?? []) as Array<{ userId: string; amount: number }> };
+      return {
+        winners: json.winners as WinnerResult[],
+        losers: (json.losers ?? []) as Array<{ userId: string; amount: number }>,
+        playerCards: (json.playerCards ?? {}) as Record<string, string[]>,
+      };
     },
     [gameState, fetchGameState]
   );
 
-  const fetchResult = useCallback(async (gameId: string): Promise<{ winners: WinnerResult[]; losers: Array<{ userId: string; amount: number }> } | null> => {
+  const fetchResult = useCallback(async (gameId: string): Promise<{ winners: WinnerResult[]; losers: Array<{ userId: string; amount: number }>; playerCards: Record<string, string[]> } | null> => {
     try {
       const res = await fetch(`/api/games/${gameId}/result`)
       if (!res.ok) return null
       const json = await res.json()
       if (!json.winners) return null
-      return { winners: json.winners as WinnerResult[], losers: (json.losers ?? []) as Array<{ userId: string; amount: number }> }
+      return {
+        winners: json.winners as WinnerResult[],
+        losers: (json.losers ?? []) as Array<{ userId: string; amount: number }>,
+        playerCards: (json.playerCards ?? {}) as Record<string, string[]>,
+      }
     } catch {
       return null
     }

@@ -98,15 +98,27 @@ export function ActionPanel({ gameState, myUserId, onAction, isBB }: Props) {
         boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
       }}
     >
-      {/* Your turn banner */}
-      <div className="flex items-center justify-center gap-2">
-        <div
-          className="w-2 h-2 rounded-full animate-pulse"
-          style={{ background: '#34d399' }}
-        />
-        <span className="text-emerald-400 text-xs font-bold uppercase tracking-widest">
-          {isBB && canCheck && game.phase === 'preflop' ? 'BB Option — Check or Raise' : 'Your Turn'}
-        </span>
+      {/* Your turn banner + round stake */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div
+            className="w-2 h-2 rounded-full animate-pulse"
+            style={{ background: '#34d399' }}
+          />
+          <span className="text-emerald-400 text-xs font-bold uppercase tracking-widest">
+            {isBB && canCheck && game.phase === 'preflop' ? 'BB Option — Check or Raise' : 'Your Turn'}
+          </span>
+        </div>
+        <div className="flex items-center gap-3 text-xs">
+          {myCurrentBet > 0 && (
+            <span style={{ color: '#f59e0b' }}>
+              Round bet: <span className="font-bold">{myCurrentBet.toLocaleString()}</span>
+            </span>
+          )}
+          <span style={{ color: '#4a6050' }}>
+            Stack: <span className="font-semibold text-gray-300">{myStack.toLocaleString()}</span>
+          </span>
+        </div>
       </div>
 
       {/* Error */}

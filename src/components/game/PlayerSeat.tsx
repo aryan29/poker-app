@@ -11,6 +11,7 @@ interface Props {
   isMe: boolean;
   myHand: PlayerHand | null;
   isFolded?: boolean;
+  revealedCards?: string[];
   isSB?: boolean;
   isBB?: boolean;
 }
@@ -60,6 +61,7 @@ export function PlayerSeat({
   isMe,
   myHand,
   isFolded,
+  revealedCards,
   isSB,
   isBB,
 }: Props) {
@@ -141,10 +143,14 @@ export function PlayerSeat({
         </div>
       )}
 
-      {/* Hole cards (above avatar) */}
-      {myHand && !folded && (
+      {/* Hole cards (above avatar) — show revealed cards at showdown, own cards always, others face-down during play */}
+      {!folded && (myHand || revealedCards) && (
         <div className="flex gap-0.5 mb-0.5">
-          {isMe && myHand.hole_cards.length > 0 ? (
+          {revealedCards && revealedCards.length > 0 ? (
+            revealedCards.map((code) => (
+              <Card key={code} card={code} size="sm" />
+            ))
+          ) : isMe && myHand && myHand.hole_cards.length > 0 ? (
             myHand.hole_cards.map((code) => (
               <Card key={code} card={code} size="sm" />
             ))

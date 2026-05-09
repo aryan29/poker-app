@@ -104,5 +104,13 @@ export async function GET(
     .filter((p) => !winnerIds.has(p.userId) && p.totalBet > 0)
     .map((p) => ({ userId: p.userId, amount: -p.totalBet }))
 
-  return NextResponse.json({ winners, losers })
+  // Reveal hole cards for all non-folded players
+  const playerCards: Record<string, string[]> = {}
+  players.forEach((p) => {
+    if (!p.isFolded && p.holeCards.length > 0) {
+      playerCards[p.userId] = p.holeCards.map((c) => c.code)
+    }
+  })
+
+  return NextResponse.json({ winners, losers, playerCards })
 }

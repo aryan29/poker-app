@@ -171,17 +171,29 @@ export async function POST(
     return NextResponse.json({ game: { ...game, phase: 'showdown' }, winners: result.winners, losers: (() => {
       const winnerIds = new Set(result.winners.map((w) => w.userId))
       return updatedState.players.filter((p) => !winnerIds.has(p.userId) && p.totalBet > 0).map((p) => ({ userId: p.userId, amount: -p.totalBet }))
+    })(), playerCards: (() => {
+      const cards: Record<string, string[]> = {}
+      updatedState.players.forEach((p) => { if (!p.isFolded) cards[p.userId] = p.holeCards.map((c) => c.code) })
+      return cards
     })() })
   }
 
   if (result.phaseComplete) {
     const activePlayers = updatedState.players.filter((p) => !p.isFolded)
+    // No one can act: all remaining players are all-in → deal the board automatically
+    const allInNoAction = activePlayers.length > 1 && activePlayers.every((p) => p.isAllIn)
 
-    if (activePlayers.length <= 1 || updatedState.phase === 'river') {
-      const winners = determineWinner(updatedState)
+    if (activePlayers.length <= 1 || updatedState.phase === 'river' || allInNoAction) {
+      // Auto-advance through remaining streets when all players are all-in
+      let finalState = updatedState
+      while (allInNoAction && finalState.phase !== 'river' && finalState.phase !== 'showdown') {
+        finalState = advancePhase(finalState)
+      }
+
+      const winners = determineWinner(finalState)
 
       for (const winner of winners) {
-        const winnerSeat = updatedState.players.find((p) => p.userId === winner.userId)
+        const winnerSeat = finalState.players.find((p) => p.userId === winner.userId)
         if (winnerSeat) {
           await admin
             .from('table_seats')
@@ -193,17 +205,28 @@ export async function POST(
 
       await admin
         .from('games')
-        .update({ phase: 'showdown', pot: 0, current_player_id: null, deck_state: serializeDeck(updatedState) })
+        .update({
+          phase: 'showdown',
+          community_cards: finalState.communityCards.map((c) => c.code),
+          pot: 0,
+          current_player_id: null,
+          deck_state: serializeDeck(finalState),
+        })
         .eq('id', gameId)
 
       await admin.from('tables').update({ status: 'waiting' }).eq('id', game.table_id)
 
       const winnerIds = new Set(winners.map((w) => w.userId))
-      const losers = updatedState.players
+      const losers = finalState.players
         .filter((p) => !winnerIds.has(p.userId) && p.totalBet > 0)
         .map((p) => ({ userId: p.userId, amount: -p.totalBet }))
 
-      return NextResponse.json({ game: { ...game, phase: 'showdown' }, winners, losers })
+      const playerCards: Record<string, string[]> = {}
+      finalState.players.forEach((p) => {
+        if (!p.isFolded) playerCards[p.userId] = p.holeCards.map((c) => c.code)
+      })
+
+      return NextResponse.json({ game: { ...game, phase: 'showdown' }, winners, losers, playerCards })
     }
 
     // Advance to next phase (flop/turn/river)

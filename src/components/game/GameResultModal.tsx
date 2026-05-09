@@ -2,10 +2,12 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import type { WinnerResult } from '@/types';
+import { Card } from './Card';
 
 interface Props {
   winners: WinnerResult[];
   losers?: Array<{ userId: string; amount: number }>;
+  playerCards?: Record<string, string[]>;
   seats: Array<{ user_id: string; profile: { display_name: string } }>;
   isHost: boolean;
   onPlayAgain: () => void;
@@ -28,6 +30,7 @@ const HAND_RANK_LABELS: Record<string, string> = {
 export function GameResultModal({
   winners,
   losers = [],
+  playerCards = {},
   seats,
   isHost,
   onPlayAgain,
@@ -126,6 +129,14 @@ export function GameResultModal({
                       {winner.handResult.description}
                     </p>
                   )}
+                  {/* Hole cards */}
+                  {playerCards[winner.userId] && (
+                    <div className="flex gap-1 mt-1.5">
+                      {playerCards[winner.userId].map((code) => (
+                        <Card key={code} card={code} size="sm" />
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Amount won */}
@@ -165,11 +176,18 @@ export function GameResultModal({
                       {name.charAt(0).toUpperCase()}
                     </div>
 
-                    {/* Name */}
+                    {/* Name + cards */}
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-white text-lg leading-tight truncate">
                         {name}
                       </p>
+                      {playerCards[loser.userId] && (
+                        <div className="flex gap-1 mt-1.5">
+                          {playerCards[loser.userId].map((code) => (
+                            <Card key={code} card={code} size="sm" />
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* Amount lost */}
