@@ -40,6 +40,8 @@ export interface Game {
   phase: GamePhase;
   community_cards: string[];
   pot: number;
+  round_pot: number;
+  side_pots: Array<{ amount: number; eligiblePlayers: string[] }>;
   current_player_id: string | null;
   dealer_seat: number;
   current_bet: number;

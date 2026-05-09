@@ -2,6 +2,8 @@
 
 import type { GameState, ActionType } from '@/types';
 import { useState } from 'react';
+import { evaluateHand } from '@/lib/poker/evaluator';
+import type { HandRank } from '@/types';
 
 interface Props {
   gameState: GameState;
@@ -62,27 +64,57 @@ export function ActionPanel({ gameState, myUserId, onAction, isBB }: Props) {
 
   const isPending = pending !== null;
 
+  // ── Hand Strength Badge ────────────────────────────────────────────────────
+  const showHandStrength =
+    isMyTurn &&
+    (game.phase === 'flop' || game.phase === 'turn' || game.phase === 'river') &&
+    myHand?.hole_cards?.length === 2 &&
+    (game.community_cards?.length ?? 0) >= 3;
+
+  let handResult: ReturnType<typeof evaluateHand> | null = null;
+  if (showHandStrength) {
+    try {
+      handResult = evaluateHand([...myHand!.hole_cards, ...game.community_cards]);
+    } catch {
+      handResult = null;
+    }
+  }
+
+  // ── Pot Odds ───────────────────────────────────────────────────────────────
+  const showPotOdds = isMyTurn && callAmount > 0;
+  const requiredEquity = showPotOdds
+    ? Math.round((callAmount / (game.pot + callAmount)) * 100)
+    : 0;
+
   if (!isMyTurn) {
     const waitingFor = currentPlayer?.profile?.display_name ?? 'someone';
     return (
       <div
-        className="flex items-center justify-center px-8 py-4 rounded-2xl"
+        className="flex items-center justify-center px-8 py-3 rounded-2xl"
         style={{
-          background: 'rgba(0,0,0,0.5)',
-          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgba(0,0,0,0.45)',
+          border: '1px solid rgba(255,255,255,0.07)',
           backdropFilter: 'blur(8px)',
+          position: 'relative',
+          zIndex: 20,
         }}
       >
         <div className="flex items-center gap-3">
-          <div
-            className="w-2 h-2 rounded-full animate-pulse"
-            style={{ background: '#fbbf24' }}
-          />
+          <span style={{ fontSize: 16 }}>⏳</span>
           <span className="text-gray-400 text-sm">
             Waiting for{' '}
             <span className="text-yellow-400 font-semibold">{waitingFor}</span>
             {' '}to act…
           </span>
+          <div className="flex gap-1">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="w-1.5 h-1.5 rounded-full animate-bounce"
+                style={{ background: '#fbbf24', animationDelay: `${i * 0.15}s` }}
+              />
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -90,29 +122,41 @@ export function ActionPanel({ gameState, myUserId, onAction, isBB }: Props) {
 
   return (
     <div
-      className="flex flex-col gap-3 px-6 py-4 rounded-2xl w-full max-w-lg"
+      className="flex flex-col gap-3 px-4 sm:px-6 py-4 rounded-2xl w-full max-w-lg"
       style={{
-        background: 'rgba(0,0,0,0.65)',
-        border: '1px solid rgba(255,255,255,0.1)',
-        backdropFilter: 'blur(12px)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+        background: 'rgba(4,20,10,0.85)',
+        border: '1px solid rgba(52,211,153,0.2)',
+        backdropFilter: 'blur(16px)',
+        boxShadow: '0 8px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(52,211,153,0.05)',
+        isolation: 'isolate',
+        position: 'relative',
+        zIndex: 20,
       }}
     >
-      {/* Your turn banner + round stake */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      {/* YOUR TURN header */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div
+          className="flex items-center gap-2 px-3 py-1 rounded-full"
+          style={{
+            background: 'rgba(52,211,153,0.12)',
+            border: '1px solid rgba(52,211,153,0.25)',
+          }}
+        >
           <div
             className="w-2 h-2 rounded-full animate-pulse"
             style={{ background: '#34d399' }}
           />
-          <span className="text-emerald-400 text-xs font-bold uppercase tracking-widest">
-            {isBB && canCheck && game.phase === 'preflop' ? 'BB Option — Check or Raise' : 'Your Turn'}
+          <span className="text-emerald-400 text-xs font-black uppercase tracking-widest">
+            {isBB && canCheck && game.phase === 'preflop' ? '♛ BB Option' : '♠ Your Turn'}
           </span>
         </div>
-        <div className="flex items-center gap-3 text-xs">
+        <div className="flex items-center gap-2 sm:gap-3 text-xs flex-wrap">
+          {handResult && (
+            <HandStrengthBadge rank={handResult.rank} description={handResult.description} />
+          )}
           {myCurrentBet > 0 && (
             <span style={{ color: '#f59e0b' }}>
-              Round bet: <span className="font-bold">{myCurrentBet.toLocaleString()}</span>
+              Bet: <span className="font-bold">{myCurrentBet.toLocaleString()}</span>
             </span>
           )}
           <span style={{ color: '#4a6050' }}>
@@ -120,6 +164,23 @@ export function ActionPanel({ gameState, myUserId, onAction, isBB }: Props) {
           </span>
         </div>
       </div>
+
+      {/* Pot Odds Bar */}
+      {showPotOdds && (
+        <div
+          data-testid="pot-odds-bar"
+          className="rounded-xl px-3 py-1.5 text-xs flex items-center gap-2"
+          style={{
+            background: 'rgba(251,191,36,0.06)',
+            border: '1px solid rgba(251,191,36,0.18)',
+            color: '#fbbf24',
+          }}
+        >
+          <span style={{ opacity: 0.6 }}>🎯</span>
+          Call <span className="font-bold">{callAmount.toLocaleString()}</span> into pot of <span className="font-bold">{game.pot.toLocaleString()}</span>
+          <span className="ml-auto font-bold text-yellow-300">{requiredEquity}% equity needed</span>
+        </div>
+      )}
 
       {/* Error */}
       {actionError && (
@@ -132,44 +193,44 @@ export function ActionPanel({ gameState, myUserId, onAction, isBB }: Props) {
       <div className="flex gap-2 items-center">
         {/* Fold */}
         <ActionButton
-          label="Fold"
+          label="✕ Fold"
           onClick={() => handleAction('fold')}
           disabled={isPending}
           isLoading={pending === 'fold'}
           color="red"
-          className="flex-1"
+          className="flex-1 min-h-[46px]"
         />
 
         {/* Check or Call */}
         {canCheck ? (
           <ActionButton
-            label="Check"
+            label="✓ Check"
             onClick={() => handleAction('check')}
             disabled={isPending}
             isLoading={pending === 'check'}
             color="gray"
-            className="flex-1"
+            className="flex-1 min-h-[46px]"
           />
         ) : (
           <ActionButton
-            label={`Call ${callAmount.toLocaleString()}`}
+            label={`📞 Call ${callAmount.toLocaleString()}`}
             onClick={() => handleAction('call')}
             disabled={isPending}
             isLoading={pending === 'call'}
             color="blue"
-            className="flex-1"
+            className="flex-1 min-h-[46px]"
           />
         )}
 
         {/* All-in */}
         {myStack > 0 && (
           <ActionButton
-            label="All In"
+            label="⚡ All In"
             onClick={() => handleAction('all_in', myStack)}
             disabled={isPending}
             isLoading={pending === 'all_in'}
             color="purple"
-            className="flex-1"
+            className="flex-1 min-h-[46px]"
           />
         )}
       </div>
@@ -180,13 +241,14 @@ export function ActionPanel({ gameState, myUserId, onAction, isBB }: Props) {
           <div
             className="flex-1 flex items-center rounded-xl overflow-hidden"
             style={{
-              border: '1px solid rgba(255,255,255,0.15)',
-              background: 'rgba(0,0,0,0.4)',
+              border: '1px solid rgba(52,211,153,0.2)',
+              background: 'rgba(0,0,0,0.5)',
             }}
           >
-            <span className="text-gray-500 text-xs px-3">Raise</span>
+            <span className="text-emerald-600 text-xs px-3 flex-shrink-0 font-semibold">↑ Raise</span>
             <input
               type="number"
+              inputMode="numeric"
               min={minRaise}
               max={maxRaise}
               value={raiseAmount}
@@ -195,43 +257,77 @@ export function ActionPanel({ gameState, myUserId, onAction, isBB }: Props) {
                 setActionError(null);
               }}
               placeholder={`${minRaise}–${maxRaise}`}
-              className="flex-1 bg-transparent text-white text-sm py-2 pr-3 outline-none placeholder-gray-600"
+              className="flex-1 bg-transparent text-white text-sm py-2.5 pr-3 outline-none placeholder-gray-700 min-w-0"
             />
           </div>
           <ActionButton
-            label="Raise"
+            label="Raise ↑"
             onClick={handleRaise}
             disabled={isPending || !raiseAmount}
             isLoading={pending === 'raise'}
             color="green"
+            className="min-h-[46px]"
           />
         </div>
       )}
 
-      {/* Quick raise amounts */}
+      {/* Quick raise presets */}
       {myStack > minRaise && (
         <div className="flex gap-1.5 justify-center flex-wrap">
-          {[0.5, 0.75, 1].map((fraction) => {
+          {([0.33, 0.5, 0.75, 1] as const).map((fraction) => {
             const amt = Math.min(Math.floor(game.pot * fraction), myStack);
             if (amt < minRaise) return null;
+            const label =
+              fraction === 0.33 ? '⅓ pot' :
+              fraction === 0.5  ? '½ pot' :
+              fraction === 0.75 ? '¾ pot' : 'Pot';
             return (
               <button
                 key={fraction}
                 onClick={() => setRaiseAmount(String(amt))}
                 disabled={isPending}
-                className="px-2.5 py-1 text-xs rounded-full text-gray-300 hover:text-white transition-colors"
+                className="px-2.5 py-1.5 text-xs rounded-lg text-gray-300 hover:text-white transition-all active:scale-95 min-h-[36px]"
                 style={{
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: raiseAmount === String(amt) ? 'rgba(52,211,153,0.2)' : 'rgba(255,255,255,0.06)',
+                  border: raiseAmount === String(amt) ? '1px solid rgba(52,211,153,0.4)' : '1px solid rgba(255,255,255,0.1)',
+                  color: raiseAmount === String(amt) ? '#34d399' : undefined,
                 }}
               >
-                {fraction === 0.5 ? '1/2 pot' : fraction === 0.75 ? '3/4 pot' : 'Pot'} ({amt.toLocaleString()})
+                {label} <span className="opacity-60">({amt.toLocaleString()})</span>
               </button>
             );
           })}
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Hand Strength Badge ─────────────────────────────────────────────────────
+
+const HAND_BADGE_STYLES: Record<HandRank, { bg: string; color: string; border: string }> = {
+  'high-card':       { bg: 'rgba(107,114,128,0.3)', color: '#9ca3af', border: 'rgba(107,114,128,0.3)' },
+  'pair':            { bg: 'rgba(59,130,246,0.2)',  color: '#60a5fa', border: 'rgba(59,130,246,0.2)' },
+  'two-pair':        { bg: 'rgba(99,102,241,0.2)',  color: '#818cf8', border: 'rgba(99,102,241,0.2)' },
+  'three-of-a-kind': { bg: 'rgba(52,211,153,0.2)',  color: '#34d399', border: 'rgba(52,211,153,0.2)' },
+  'straight':        { bg: 'rgba(20,184,166,0.2)',  color: '#2dd4bf', border: 'rgba(20,184,166,0.2)' },
+  'flush':           { bg: 'rgba(168,85,247,0.2)',  color: '#c084fc', border: 'rgba(168,85,247,0.2)' },
+  'full-house':      { bg: 'rgba(249,115,22,0.2)',  color: '#fb923c', border: 'rgba(249,115,22,0.2)' },
+  'four-of-a-kind':  { bg: 'rgba(239,68,68,0.2)',   color: '#f87171', border: 'rgba(239,68,68,0.2)' },
+  'straight-flush':  { bg: 'rgba(251,191,36,0.2)',  color: '#fbbf24', border: 'rgba(251,191,36,0.2)' },
+  'royal-flush':     { bg: 'rgba(251,191,36,0.2)',  color: '#fbbf24', border: 'rgba(251,191,36,0.2)' },
+};
+
+function HandStrengthBadge({ rank, description }: { rank: HandRank; description: string }) {
+  const s = HAND_BADGE_STYLES[rank] ?? HAND_BADGE_STYLES['high-card'];
+  return (
+    <span
+      data-testid="hand-strength-badge"
+      className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold"
+      style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}` }}
+    >
+      {description}
+    </span>
   );
 }
 
@@ -278,7 +374,7 @@ function ActionButton({ label, onClick, disabled, isLoading, color, className = 
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+      className={`px-3 sm:px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ${className}`}
       style={{
         background: s.base,
         border: `1px solid ${s.border}`,

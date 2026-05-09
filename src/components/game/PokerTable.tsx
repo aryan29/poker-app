@@ -43,8 +43,11 @@ export function PokerTable({ gameState, seats, myUserId, hostId, onStartGame, ta
   };
 
   // Compute SB and BB seat numbers from dealer seat
+  // Heads-up rule: dealer IS the small blind; the other player is BB
   const sbSeat = (() => {
     if (!game) return null;
+    const isHU = seats.length === 2;
+    if (isHU) return game.dealer_seat;
     const sorted = [...seats].sort((a, b) => a.seat_number - b.seat_number);
     const pivot = sorted.findIndex((s) => s.seat_number > game.dealer_seat);
     const ordered = pivot === -1 ? sorted : [...sorted.slice(pivot), ...sorted.slice(0, pivot)];
@@ -53,6 +56,11 @@ export function PokerTable({ gameState, seats, myUserId, hostId, onStartGame, ta
 
   const bbSeat = (() => {
     if (!game) return null;
+    const isHU = seats.length === 2;
+    if (isHU) {
+      // BB is the non-dealer player
+      return seats.find((s) => s.seat_number !== game.dealer_seat)?.seat_number ?? null;
+    }
     const sorted = [...seats].sort((a, b) => a.seat_number - b.seat_number);
     const pivot = sorted.findIndex((s) => s.seat_number > game.dealer_seat);
     const ordered = pivot === -1 ? sorted : [...sorted.slice(pivot), ...sorted.slice(0, pivot)];
@@ -60,7 +68,7 @@ export function PokerTable({ gameState, seats, myUserId, hostId, onStartGame, ta
   })();
 
   return (
-    <div className="w-full max-w-4xl px-12 py-10">
+    <div className="w-full max-w-4xl px-2 sm:px-8 lg:px-12 py-4 sm:py-8 lg:py-10">
       {/* Outer wood rail */}
       <div
         className="relative w-full rounded-[50%] overflow-visible"
@@ -103,17 +111,44 @@ export function PokerTable({ gameState, seats, myUserId, hostId, onStartGame, ta
             }}
           />
 
-          {/* Table logo/watermark */}
+          {/* Radial spotlight — center glow */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: 'radial-gradient(ellipse 55% 40% at 50% 48%, rgba(255,255,255,0.04) 0%, transparent 70%)',
+            }}
+          />
+
+          {/* Dealer emblem — center of table */}
           <div
             className="absolute inset-0 flex items-center justify-center pointer-events-none"
-            style={{ opacity: 0.04 }}
+            style={{ paddingBottom: '6%' }}
           >
-            <div
-              className="w-32 h-32 rounded-full"
-              style={{
-                border: '2px solid white',
-              }}
-            />
+            <div className="relative flex items-center justify-center" style={{ width: 90, height: 90 }}>
+              {/* Outer glow ring */}
+              <div
+                className="absolute inset-0 rounded-full"
+                style={{
+                  background: 'radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                }}
+              />
+              {/* Four suits arranged in a ring */}
+              <svg viewBox="0 0 90 90" width="90" height="90" style={{ opacity: 0.18 }}>
+                {/* ♠ top */}
+                <text x="45" y="22" textAnchor="middle" fontSize="18" fill="white">♠</text>
+                {/* ♥ right */}
+                <text x="72" y="52" textAnchor="middle" fontSize="18" fill="#f87171">♥</text>
+                {/* ♣ bottom */}
+                <text x="45" y="80" textAnchor="middle" fontSize="18" fill="white">♣</text>
+                {/* ♦ left */}
+                <text x="18" y="52" textAnchor="middle" fontSize="18" fill="#f87171">♦</text>
+                {/* Center dividing ring */}
+                <circle cx="45" cy="45" r="18" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="0.8" />
+                {/* DEALER text */}
+                <text x="45" y="49" textAnchor="middle" fontSize="7" fill="rgba(255,255,255,0.7)" fontFamily="monospace" letterSpacing="1.5" fontWeight="bold">DEALER</text>
+              </svg>
+            </div>
           </div>
         </div>
 
@@ -131,6 +166,8 @@ export function PokerTable({ gameState, seats, myUserId, hostId, onStartGame, ta
                 cards={game.community_cards}
                 phase={game.phase}
                 pot={game.pot}
+                roundPot={game.round_pot}
+                sidePots={game.side_pots}
               />
               <span
                 className="text-emerald-300/50 text-xs uppercase tracking-[0.25em] mt-1"

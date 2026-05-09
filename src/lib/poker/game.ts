@@ -49,7 +49,7 @@ function getPlayersBySeatOrder(
 function getNextActiveIndex(state: GameStateInternal, afterSeat: number): number {
   const ordered = getPlayersBySeatOrder(state.players, afterSeat)
   const next = ordered.find((p) => !p.isFolded && !p.isAllIn)
-  if (!next) return state.currentPlayerIndex
+  if (!next) return -1
   return state.players.findIndex((p) => p.userId === next.userId)
 }
 
@@ -71,7 +71,9 @@ function resetBettingRound(state: GameStateInternal) {
   state.lastRaiseAmount = state.bigBlind
   state.lastRaiserIndex = -1
   state.numActorsThisRound = 0
-  state.currentPlayerIndex = getNextActiveIndex(state, state.dealerSeat)
+  const nextIdx = getNextActiveIndex(state, state.dealerSeat)
+  if (nextIdx >= 0) state.currentPlayerIndex = nextIdx
+  // If nextIdx === -1, all remaining players are all-in or folded — caller handles via allInNoAction
 }
 
 function isBettingRoundComplete(state: GameStateInternal): boolean {
@@ -142,9 +144,20 @@ export function startHand(
     numActorsThisRound: 0,
   }
 
-  // Post blinds
-  const sbIndex = getNextActiveIndex(state, dealerSeat)
-  const bbIndex = getNextActiveIndex(state, playerStates[sbIndex].seatNumber)
+  // Post blinds — heads-up rule: dealer IS the small blind
+  const isHeadsUp = players.length === 2
+  let sbIndex: number
+  let bbIndex: number
+
+  if (isHeadsUp) {
+    const dealerIdx = playerStates.findIndex((p) => p.seatNumber === dealerSeat)
+    sbIndex = dealerIdx >= 0 ? dealerIdx : 0
+    bbIndex = getNextActiveIndex(state, playerStates[sbIndex].seatNumber)
+  } else {
+    sbIndex = getNextActiveIndex(state, dealerSeat)
+    bbIndex = getNextActiveIndex(state, playerStates[sbIndex].seatNumber)
+  }
+
   postBlind(state, sbIndex, smallBlind)
   postBlind(state, bbIndex, bigBlind)
   state.lastRaiserIndex = bbIndex
@@ -158,8 +171,13 @@ export function startHand(
     }
   }
 
-  // First to act: UTG (left of BB)
-  state.currentPlayerIndex = getNextActiveIndex(state, playerStates[bbIndex].seatNumber)
+  // Preflop first to act:
+  // Heads-up → dealer/SB goes first; 3+ players → UTG (left of BB)
+  if (isHeadsUp) {
+    state.currentPlayerIndex = sbIndex
+  } else {
+    state.currentPlayerIndex = getNextActiveIndex(state, playerStates[bbIndex].seatNumber)
+  }
 
   return state
 }
@@ -255,7 +273,8 @@ export function processAction(
 
   // Advance to next active player using seat order
   const nextIndex = getNextActiveIndex(state, state.players[playerIndex].seatNumber)
-  state.currentPlayerIndex = nextIndex
+  if (nextIndex >= 0) state.currentPlayerIndex = nextIndex
+  // If nextIndex === -1, all others are all-in/folded; isBettingRoundComplete will return true below
 
   // Folds do not count as a betting action (already handled — we skip the increment for folds)
   if (action !== 'fold') {
@@ -312,7 +331,45 @@ export function advancePhase(state: GameStateInternal): GameStateInternal {
 // ─── determineWinner ──────────────────────────────────────────────────────────
 
 /**
+ * Build main pot + side pots from each player's total contribution.
+ * Folded players' chips are included in pot amounts but they cannot win.
+ * Exported for unit testing.
+ */
+export function calculatePots(
+  players: PlayerState[]
+): Array<{ amount: number; eligiblePlayers: string[] }> {
+  const activePlayers = players.filter((p) => !p.isFolded)
+
+  // Unique contribution levels, ascending
+  const betLevels = [
+    ...new Set(players.filter((p) => p.totalBet > 0).map((p) => p.totalBet)),
+  ].sort((a, b) => a - b)
+
+  const pots: Array<{ amount: number; eligiblePlayers: string[] }> = []
+  let previousLevel = 0
+
+  for (const level of betLevels) {
+    const levelDiff = level - previousLevel
+    // All players (folded or not) who put in at least this much
+    const numContributors = players.filter((p) => p.totalBet >= level).length
+    const potAmount = levelDiff * numContributors
+    // Only non-folded players who contributed at least this level can win it
+    const eligible = activePlayers
+      .filter((p) => p.totalBet >= level)
+      .map((p) => p.userId)
+
+    if (potAmount > 0 && eligible.length > 0) {
+      pots.push({ amount: potAmount, eligiblePlayers: eligible })
+    }
+    previousLevel = level
+  }
+
+  return pots
+}
+
+/**
  * Evaluate all non-folded hands and return winner(s) with pot amounts.
+ * Correctly handles side pots when players are all-in with unequal stacks.
  * Does NOT write to DB — caller must persist.
  */
 export function determineWinner(state: GameStateInternal): WinnerResult[] {
@@ -334,19 +391,43 @@ export function determineWinner(state: GameStateInternal): WinnerResult[] {
     ]
   }
 
-  const hands = activePlayers.map((p) => ({
-    userId: p.userId,
-    cards: [...p.holeCards, ...state.communityCards].map((c) => c.code),
-  }))
+  const pots = calculatePots(state.players)
+  const winnings = new Map<string, number>()
+  const handResultMap = new Map<string, WinnerResult['handResult']>()
 
-  const winners = findWinners(hands)
-  const amountEach = Math.floor(state.pot / winners.length)
+  for (const pot of pots) {
+    const eligible = activePlayers.filter((p) =>
+      pot.eligiblePlayers.includes(p.userId)
+    )
+    if (eligible.length === 0) continue
 
-  return winners.map((w) => ({
-    userId: w.userId,
-    handResult: w.handResult,
-    amount: amountEach,
-  }))
+    const hands = eligible.map((p) => ({
+      userId: p.userId,
+      cards: [...p.holeCards, ...state.communityCards].map((c) => c.code),
+    }))
+
+    const potWinners = findWinners(hands)
+    const amountEach = Math.floor(pot.amount / potWinners.length)
+
+    for (const w of potWinners) {
+      winnings.set(w.userId, (winnings.get(w.userId) ?? 0) + amountEach)
+      handResultMap.set(w.userId, w.handResult)
+    }
+  }
+
+  return Array.from(winnings.entries())
+    .filter(([, amount]) => amount > 0)
+    .map(([userId, amount]) => ({
+      userId,
+      handResult: handResultMap.get(userId) ?? {
+        rank: 'high-card' as const,
+        rankValue: 1,
+        tiebreakers: [],
+        cards: [],
+        description: '',
+      },
+      amount,
+    }))
 }
 
 // ─── Serialization ────────────────────────────────────────────────────────────

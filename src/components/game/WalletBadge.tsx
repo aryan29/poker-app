@@ -75,7 +75,7 @@ export function WalletBadge({ balance, onBalanceUpdate }: Props) {
             }}
           />
           <div
-            className="absolute right-0 top-full mt-2 z-50 p-4 rounded-2xl w-56"
+            className="absolute right-0 top-full mt-2 z-50 p-4 rounded-2xl w-56 max-w-[calc(100vw-1rem)]"
             style={{
               background: 'linear-gradient(135deg, #1a1a1a, #111)',
               border: '1px solid rgba(251,191,36,0.3)',

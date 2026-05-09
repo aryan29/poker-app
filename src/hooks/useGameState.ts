@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { GameState, ActionType, PokerTable, Profile, TableSeat, GameAction, WinnerResult } from '@/types';
 
@@ -10,9 +10,21 @@ export function useGameState(tableCode: string) {
   const [myProfile, setMyProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Cache profile — only fetch once; it changes rarely
+  const profileRef = useRef<Profile | null>(null);
+  // Debounce: prevent concurrent duplicate fetches (Realtime fires multiple events per action)
+  const fetchingRef = useRef(false);
+  const pendingFetchRef = useRef(false);
   const supabase = createClient();
 
   const fetchGameState = useCallback(async () => {
+    // If a fetch is already in flight, mark that another one is needed and return
+    if (fetchingRef.current) {
+      pendingFetchRef.current = true;
+      return;
+    }
+    fetchingRef.current = true;
+    pendingFetchRef.current = false;
     try {
       const {
         data: { user },
@@ -26,14 +38,18 @@ export function useGameState(tableCode: string) {
 
       const userId = user.id;
 
-      // Fetch my profile
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (profileData) setMyProfile(profileData as Profile);
+      // Fetch my profile only on first load (chip_balance refreshed after sendAction explicitly)
+      if (!profileRef.current) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
+        if (profileData) {
+          profileRef.current = profileData as Profile;
+          setMyProfile(profileData as Profile);
+        }
+      }
 
       // Fetch table with seats + profiles
       const { data: tableData, error: tableError } = await supabase
@@ -118,14 +134,20 @@ export function useGameState(tableCode: string) {
       setError(msg);
     } finally {
       setLoading(false);
+      fetchingRef.current = false;
+      // If another fetch was requested while this one was in flight, run it now
+      if (pendingFetchRef.current) {
+        pendingFetchRef.current = false;
+        fetchGameState();
+      }
     }
   }, [tableCode, supabase]);
 
   useEffect(() => {
     fetchGameState();
 
-    // Polling fallback — catches missed Realtime events (admin-client writes may not fire them)
-    const pollInterval = setInterval(fetchGameState, 3000);
+    // Polling fallback every 6s — Realtime handles real-time updates; poll catches missed events
+    const pollInterval = setInterval(fetchGameState, 6000);
 
     const channel = supabase
       .channel(`table:${tableCode}`)
@@ -175,15 +197,21 @@ export function useGameState(tableCode: string) {
         throw new Error(json.error ?? 'Action failed');
       }
       const json = await res.json().catch(() => ({}));
-      // Immediately refresh game state instead of waiting for realtime subscription
-      await fetchGameState();
-      // Return winners+losers+playerCards if this action ended the hand
-      if (!json.winners) return null;
-      return {
-        winners: json.winners as WinnerResult[],
-        losers: (json.losers ?? []) as Array<{ userId: string; amount: number }>,
-        playerCards: (json.playerCards ?? {}) as Record<string, string[]>,
-      };
+
+      if (json.winners) {
+        // Hand ended — refresh profile for updated chip balance, then return results
+        profileRef.current = null;
+        await fetchGameState();
+        return {
+          winners: json.winners as WinnerResult[],
+          losers: (json.losers ?? []) as Array<{ userId: string; amount: number }>,
+          playerCards: (json.playerCards ?? {}) as Record<string, string[]>,
+        };
+      }
+
+      // Mid-hand action: fire refetch immediately (non-blocking) — Realtime or explicit, first wins
+      fetchGameState();
+      return null;
     },
     [gameState, fetchGameState]
   );
@@ -212,6 +240,7 @@ export function useGameState(tableCode: string) {
       const json = await res.json().catch(() => ({}));
       throw new Error(json.error ?? 'Failed to start game');
     }
+    profileRef.current = null; // refresh chip balance
     await fetchGameState();
   }, [tableCode, fetchGameState]);
 

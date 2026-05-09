@@ -9,6 +9,7 @@ import { ActionPanel } from '@/components/game/ActionPanel'
 import { GameResultModal } from '@/components/game/GameResultModal'
 import { Chat } from '@/components/game/Chat'
 import { WalletBadge } from '@/components/game/WalletBadge'
+import { HandHistoryPanel } from '@/components/game/HandHistoryPanel'
 import type { ActionType, WinnerResult } from '@/types'
 import Link from 'next/link'
 
@@ -190,11 +191,14 @@ export default function RoomPage() {
   const router = useRouter()
   const code = (params.code as string).toUpperCase()
   const [showBuyIn, setShowBuyIn] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const [authenticated, setAuthenticated] = useState<boolean | null>(null)
   const [abandoning, setAbandoning] = useState(false)
   const [handWinners, setHandWinners] = useState<WinnerResult[] | null>(null)
   const [handLosers, setHandLosers] = useState<Array<{ userId: string; amount: number }> | null>(null)
   const [handPlayerCards, setHandPlayerCards] = useState<Record<string, string[]> | null>(null)
+  const [showdownTableCards, setShowdownTableCards] = useState<Record<string, string[]> | null>(null)
+  const [showMobileChat, setShowMobileChat] = useState(false)
   const firstLoadDone = useRef(false)
 
   const supabase = createClient()
@@ -208,6 +212,7 @@ export default function RoomPage() {
       setHandWinners(result.winners)
       setHandLosers(result.losers)
       setHandPlayerCards(result.playerCards)
+      setShowdownTableCards(result.playerCards)
     }
   }
 
@@ -250,12 +255,20 @@ export default function RoomPage() {
             setHandWinners(result.winners)
             setHandLosers(result.losers)
             setHandPlayerCards(result.playerCards)
+            setShowdownTableCards(result.playerCards)
           }
         })
       }
     }
     prevPhaseRef.current = phase
   }, [gameState?.game?.phase, gameState?.game?.id, fetchResult, handWinners])
+
+  // Clear revealed cards when a new hand begins (phase transitions away from showdown)
+  useEffect(() => {
+    if (gameState?.game?.phase && gameState.game.phase !== 'showdown') {
+      setShowdownTableCards(null)
+    }
+  }, [gameState?.game?.phase])
 
   // Determine if user is seated (use seats directly — available even with no active game)
   const isSeated =
@@ -324,51 +337,75 @@ export default function RoomPage() {
     >
       {/* Room header bar */}
       <div
-        className="flex items-center justify-between px-6 py-3 border-b"
+        className="flex items-center justify-between px-3 sm:px-6 py-2.5 sm:py-3 border-b"
         style={{
           background: 'rgba(4,16,8,0.9)',
           borderColor: 'rgba(212,175,55,0.12)',
         }}
       >
-        <div className="flex items-center gap-4">
-          <Link href="/lobby" className="text-sm transition-colors" style={{ color: '#4a6050' }}
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+          <Link href="/lobby" className="text-sm transition-colors flex-shrink-0" style={{ color: '#4a6050' }}
             onMouseEnter={(e) => (e.currentTarget.style.color = '#d4af37')}
             onMouseLeave={(e) => (e.currentTarget.style.color = '#4a6050')}
           >
             ← Lobby
           </Link>
           <div
-            className="h-4 border-l"
+            className="h-4 border-l flex-shrink-0"
             style={{ borderColor: 'rgba(255,255,255,0.08)' }}
           />
-          <span className="font-mono font-black text-lg" style={{ color: '#d4af37' }}>
+          <span className="font-mono font-black text-base sm:text-lg flex-shrink-0" style={{ color: '#d4af37' }}>
             {code}
           </span>
           {table && (
-            <span className="text-xs" style={{ color: '#4a6050' }}>
+            <span className="text-xs hidden sm:block truncate" style={{ color: '#4a6050' }}>
               {table.small_blind}/{table.big_blind} blinds · {table.max_players} seats
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           {myProfile && <WalletBadge balance={myProfile.chip_balance} />}
           {myProfile && (
-            <span className="text-sm hidden sm:block" style={{ color: '#6b7280' }}>
+            <span className="text-sm hidden lg:block" style={{ color: '#6b7280' }}>
               {myProfile.display_name}
             </span>
           )}
+          {/* History button */}
+          <button
+            onClick={() => setShowHistory((v) => !v)}
+            className="px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex-shrink-0"
+            style={{
+              background: showHistory ? 'rgba(212,175,55,0.25)' : 'rgba(212,175,55,0.1)',
+              border: '1px solid rgba(212,175,55,0.3)',
+              color: '#d4af37',
+            }}
+          >
+            📋 <span className="hidden sm:inline">History</span>
+          </button>
+          {/* Chat toggle — mobile only */}
+          <button
+            onClick={() => setShowMobileChat((v) => !v)}
+            className="lg:hidden px-2 py-1.5 rounded-lg text-xs font-semibold flex-shrink-0"
+            style={{
+              background: showMobileChat ? 'rgba(212,175,55,0.25)' : 'rgba(212,175,55,0.1)',
+              border: '1px solid rgba(212,175,55,0.3)',
+              color: '#d4af37',
+            }}
+          >
+            💬
+          </button>
           {table && myProfile && table.host_id === myProfile.id && table.status === 'playing' && (
             <button
               onClick={handleAbandon}
               disabled={abandoning}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+              className="px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50 flex-shrink-0"
               style={{
                 background: 'rgba(239,68,68,0.15)',
                 border: '1px solid rgba(239,68,68,0.4)',
                 color: '#f87171',
               }}
             >
-              {abandoning ? 'Ending…' : 'Abandon Game'}
+              {abandoning ? 'Ending…' : <><span className="sm:hidden">✕</span><span className="hidden sm:inline">Abandon Game</span></>}
             </button>
           )}
         </div>
@@ -376,7 +413,7 @@ export default function RoomPage() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Main table area */}
-        <div className="flex-1 flex flex-col items-center justify-center p-4 gap-4">
+        <div className="flex-1 flex flex-col items-center justify-center p-2 sm:p-4 gap-3 sm:gap-4 min-w-0">
           <PokerTable
             gameState={gameState}
             seats={seats}
@@ -384,10 +421,11 @@ export default function RoomPage() {
             hostId={table?.host_id}
             onStartGame={startGame}
             tableCode={code}
-            showdownCards={handPlayerCards ?? undefined}
+            showdownCards={showdownTableCards ?? undefined}
           />
 
           {gameState && myProfile && (
+            <div className="relative z-20 w-full flex justify-center">
             <ActionPanel
               gameState={gameState}
               myUserId={myProfile.id}
@@ -397,11 +435,16 @@ export default function RoomPage() {
                 const sorted = [...seats].sort((a, b) => a.seat_number - b.seat_number);
                 const pivot = sorted.findIndex((s) => s.seat_number > gameState.game.dealer_seat);
                 const ordered = pivot === -1 ? sorted : [...sorted.slice(pivot), ...sorted.slice(0, pivot)];
-                const bbSeat = ordered[1]?.seat_number ?? ordered[0]?.seat_number;
+                // Heads-up: dealer is SB so BB is ordered[0]; 3+ players: BB is ordered[1]
+                const isHU = seats.length === 2;
+                const bbSeat = isHU
+                  ? ordered[0]?.seat_number
+                  : (ordered[1]?.seat_number ?? ordered[0]?.seat_number);
                 const mySeat = seats.find((s) => s.user_id === myProfile.id);
                 return mySeat?.seat_number === bbSeat;
               })()}
             />
+            </div>
           )}
 
           {!isSeated && !showBuyIn && table && (
@@ -436,9 +479,9 @@ export default function RoomPage() {
           })()}
         </div>
 
-        {/* Chat sidebar */}
+        {/* Chat sidebar — desktop only */}
         <div
-          className="w-72 flex-shrink-0 flex flex-col border-l"
+          className="hidden lg:flex w-72 flex-shrink-0 flex-col border-l"
           style={{
             background: 'rgba(4,16,8,0.8)',
             borderColor: 'rgba(212,175,55,0.08)',
@@ -451,6 +494,44 @@ export default function RoomPage() {
           />
         </div>
       </div>
+
+      {/* Mobile chat overlay */}
+      {showMobileChat && (
+        <div
+          className="fixed inset-0 z-30 lg:hidden flex flex-col"
+          style={{ background: 'rgba(3,13,7,0.97)', top: '0' }}
+        >
+          <div
+            className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
+            style={{ borderColor: 'rgba(212,175,55,0.12)', background: 'rgba(4,16,8,0.95)' }}
+          >
+            <span className="font-semibold text-white">Table Chat</span>
+            <button
+              onClick={() => setShowMobileChat(false)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+              style={{ background: 'rgba(255,255,255,0.1)', color: '#9ca3af' }}
+            >
+              ✕ Close
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <Chat
+              roomCode={code}
+              userId={myProfile?.id}
+              displayName={myProfile?.display_name}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Hand history panel */}
+      {showHistory && myProfile && (
+        <HandHistoryPanel
+          tableCode={code}
+          myUserId={myProfile.id}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
 
       {/* Buy-in modal */}
       {showBuyIn && table && (

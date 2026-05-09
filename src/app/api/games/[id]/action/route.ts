@@ -5,6 +5,7 @@ import {
   processAction,
   advancePhase,
   determineWinner,
+  calculatePots,
   serializeDeck,
   type GameStateInternal,
 } from '@/lib/poker/game'
@@ -163,10 +164,30 @@ export async function POST(
 
     await admin
       .from('games')
-      .update({ phase: 'showdown', pot: 0, current_player_id: null, deck_state: serializeDeck(updatedState) })
+      .update({ phase: 'showdown', pot: 0, round_pot: 0, side_pots: [], current_player_id: null, deck_state: serializeDeck(updatedState) })
       .eq('id', gameId)
 
     await admin.from('tables').update({ status: 'waiting' }).eq('id', game.table_id)
+
+    // Write hand history — Path A (early fold)
+    const earlyFoldResults: Record<string, { holeCards: string[]; netChips: number; handRank: string | null }> = {}
+    for (const p of updatedState.players) {
+      const isWinner = result.winners.some((w: { userId: string }) => w.userId === p.userId)
+      const winner = result.winners.find((w: { userId: string }) => w.userId === p.userId)
+      earlyFoldResults[p.userId] = {
+        holeCards: p.holeCards.map((c) => c.code),
+        netChips: isWinner ? (winner?.amount ?? 0) : -p.totalBet,
+        handRank: isWinner ? (winner?.handResult?.rank ?? null) : null,
+      }
+    }
+    await admin.from('hand_history').insert({
+      table_id: game.table_id,
+      game_id: gameId,
+      winner_user_ids: result.winners.map((w: { userId: string }) => w.userId),
+      pot: updatedState.pot + updatedState.players.reduce((s, p) => s + p.currentBet, 0),
+      community_cards: updatedState.communityCards.map((c) => c.code),
+      player_results: earlyFoldResults,
+    })
 
     return NextResponse.json({ game: { ...game, phase: 'showdown' }, winners: result.winners, losers: (() => {
       const winnerIds = new Set(result.winners.map((w) => w.userId))
@@ -209,6 +230,8 @@ export async function POST(
           phase: 'showdown',
           community_cards: finalState.communityCards.map((c) => c.code),
           pot: 0,
+          round_pot: 0,
+          side_pots: [],
           current_player_id: null,
           deck_state: serializeDeck(finalState),
         })
@@ -216,7 +239,26 @@ export async function POST(
 
       await admin.from('tables').update({ status: 'waiting' }).eq('id', game.table_id)
 
+      // Write hand history — Path B (full showdown)
       const winnerIds = new Set(winners.map((w) => w.userId))
+      const showdownResults: Record<string, { holeCards: string[]; netChips: number; handRank: string | null }> = {}
+      for (const p of finalState.players) {
+        const winner = winners.find((w) => w.userId === p.userId)
+        showdownResults[p.userId] = {
+          holeCards: p.holeCards.map((c) => c.code),
+          netChips: winner ? winner.amount : -p.totalBet,
+          handRank: winner ? winner.handResult.rank : null,
+        }
+      }
+      const totalPot = finalState.players.reduce((s, p) => s + p.totalBet, 0)
+      await admin.from('hand_history').insert({
+        table_id: game.table_id,
+        game_id: gameId,
+        winner_user_ids: winners.map((w) => w.userId),
+        pot: totalPot,
+        community_cards: finalState.communityCards.map((c) => c.code),
+        player_results: showdownResults,
+      })
       const losers = finalState.players
         .filter((p) => !winnerIds.has(p.userId) && p.totalBet > 0)
         .map((p) => ({ userId: p.userId, amount: -p.totalBet }))
@@ -231,7 +273,11 @@ export async function POST(
 
     // Advance to next phase (flop/turn/river)
     const newState = advancePhase(updatedState)
-    const nextPlayer = newState.players[newState.currentPlayerIndex]
+    // Guard: ensure we never set current_player_id to a folded or all-in player
+    const rawNext = newState.currentPlayerIndex >= 0 ? newState.players[newState.currentPlayerIndex] : null
+    const nextPlayer = (!rawNext?.isFolded && !rawNext?.isAllIn)
+      ? rawNext
+      : newState.players.find((p) => !p.isFolded && !p.isAllIn) ?? null
 
     await admin
       .from('games')
@@ -239,6 +285,8 @@ export async function POST(
         phase: newState.phase,
         community_cards: newState.communityCards.map((c) => c.code),
         pot: newState.pot,
+        round_pot: 0,
+        side_pots: calculatePots(newState.players).length > 1 ? calculatePots(newState.players) : [],
         current_player_id: nextPlayer?.userId ?? null,
         current_bet: newState.currentBet,
         deck_state: serializeDeck(newState),
@@ -266,12 +314,20 @@ export async function POST(
   }
 
   // Advance turn within same phase
-  const nextPlayer = updatedState.players[updatedState.currentPlayerIndex]
+  const rawNextPlayer = updatedState.currentPlayerIndex >= 0 ? updatedState.players[updatedState.currentPlayerIndex] : null
+  const nextPlayer = (!rawNextPlayer?.isFolded && !rawNextPlayer?.isAllIn)
+    ? rawNextPlayer
+    : updatedState.players.find((p) => !p.isFolded && !p.isAllIn) ?? null
+
+  const roundPot = updatedState.players.reduce((s, p) => s + p.currentBet, 0)
+  const sidePots = calculatePots(updatedState.players)
 
   await admin
     .from('games')
     .update({
       pot: updatedState.pot,
+      round_pot: roundPot,
+      side_pots: sidePots.length > 1 ? sidePots : [],
       current_player_id: nextPlayer?.userId ?? null,
       current_bet: updatedState.currentBet,
       deck_state: serializeDeck(updatedState),

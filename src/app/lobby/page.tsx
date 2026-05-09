@@ -107,7 +107,7 @@ export default function LobbyPage() {
         }}
       />
 
-      <main className="max-w-6xl mx-auto px-6 py-10 relative z-10">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 relative z-10">
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>

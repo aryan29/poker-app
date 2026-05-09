@@ -69,6 +69,8 @@ export async function POST(
       phase: 'preflop',
       community_cards: [],
       pot: gameState.pot,
+      round_pot: gameState.players.reduce((s, p) => s + p.currentBet, 0),
+      side_pots: [],
       current_player_id: gameState.players[gameState.currentPlayerIndex].userId,
       dealer_seat: dealerSeat,
       deck_state: serializeDeck(gameState),
