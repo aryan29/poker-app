@@ -24,7 +24,6 @@ export function Chat({ roomCode, userId, displayName }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -36,62 +35,86 @@ export function Chat({ roomCode, userId, displayName }: Props) {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
+  // Load chat history from DB on mount
   useEffect(() => {
-    const channel = supabase.channel(`chat:${roomCode}`, {
-      config: { broadcast: { self: true } },
-    });
+    const loadHistory = async () => {
+      const { data } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('room_code', roomCode)
+        .order('created_at', { ascending: true })
+        .limit(50);
 
-    channel.on(
-      'broadcast',
-      { event: 'message' },
-      ({ payload }: { payload: ChatMessage }) => {
-        setMessages((prev) => {
-          // Keep last 50
-          const updated = [...prev, payload];
-          return updated.slice(-50);
-        });
+      if (data && data.length > 0) {
+        setMessages(
+          data.map((row) => ({
+            id: row.id,
+            userId: row.user_id,
+            displayName: row.display_name,
+            text: row.text,
+            timestamp: new Date(row.created_at).getTime(),
+          }))
+        );
       }
-    );
+    };
 
-    channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        // System message on join
-        const joinMsg: ChatMessage = {
-          id: `sys-${Date.now()}`,
-          userId: 'system',
-          displayName: 'System',
-          text: `${displayName ?? 'A player'} joined the room`,
-          timestamp: Date.now(),
-          isSystem: true,
-        };
-        setMessages([joinMsg]);
-      }
-    });
+    loadHistory();
+  }, [roomCode, supabase]);
 
-    channelRef.current = channel;
+  // Subscribe to new messages via Realtime postgres_changes
+  useEffect(() => {
+    const channel = supabase
+      .channel(`chat:${roomCode}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `room_code=eq.${roomCode}`,
+        },
+        (payload) => {
+          const row = payload.new as {
+            id: string;
+            user_id: string;
+            display_name: string;
+            text: string;
+            created_at: string;
+          };
+          const msg: ChatMessage = {
+            id: row.id,
+            userId: row.user_id,
+            displayName: row.display_name,
+            text: row.text,
+            timestamp: new Date(row.created_at).getTime(),
+          };
+          setMessages((prev) => {
+            // Deduplicate in case of double-fire
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            const updated = [...prev, msg];
+            return updated.slice(-50);
+          });
+        }
+      )
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roomCode, displayName, supabase]);
+  }, [roomCode, supabase]);
 
   const sendMessage = async () => {
     const text = input.trim();
-    if (!text || !userId || !displayName || !channelRef.current) return;
-
-    const msg: ChatMessage = {
-      id: `${userId}-${Date.now()}`,
-      userId,
-      displayName,
-      text,
-      timestamp: Date.now(),
-    };
+    if (!text || !userId || !displayName) return;
 
     setInput('');
-    await channelRef.current.send({
-      type: 'broadcast',
-      event: 'message',
-      payload: msg,
+
+    // Persist to DB — Realtime will deliver it to all subscribers including sender
+    await supabase.from('chat_messages').insert({
+      room_code: roomCode,
+      user_id: userId,
+      display_name: displayName,
+      text,
     });
   };
 
@@ -184,22 +207,6 @@ function ChatBubble({
   message: ChatMessage;
   isMe: boolean;
 }) {
-  if (message.isSystem) {
-    return (
-      <div className="text-center py-0.5">
-        <span
-          className="text-xs px-2 py-0.5 rounded-full"
-          style={{
-            color: '#6b7280',
-            background: 'rgba(0,0,0,0.3)',
-          }}
-        >
-          {message.text}
-        </span>
-      </div>
-    );
-  }
-
   const time = new Date(message.timestamp).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
