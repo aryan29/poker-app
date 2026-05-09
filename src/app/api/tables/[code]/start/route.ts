@@ -73,7 +73,7 @@ export async function POST(
       side_pots: [],
       current_player_id: gameState.players[gameState.currentPlayerIndex].userId,
       dealer_seat: dealerSeat,
-      deck_state: serializeDeck(gameState),
+      deck_state: '',
       current_bet: gameState.currentBet,
     })
     .select()
@@ -82,6 +82,12 @@ export async function POST(
   if (gameError || !game) {
     return NextResponse.json({ error: gameError?.message ?? 'Failed to create game' }, { status: 500 })
   }
+
+  // Persist deck to private table — only admin client can read it
+  await admin.from('game_decks').insert({
+    game_id: game.id,
+    deck_state: serializeDeck(gameState),
+  })
 
   // Persist player hands (hole cards)
   await admin.from('player_hands').insert(

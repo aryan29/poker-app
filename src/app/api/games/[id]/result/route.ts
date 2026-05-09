@@ -57,7 +57,11 @@ export async function GET(
     .eq('id', game.table_id)
     .single()
 
-  const [deckPart, , lastRaisePart, lastRaiserPart] = (game.deck_state ?? '').split('|')
+  // Load deck state from private table (admin client to bypass RLS)
+  const { data: deckRow } = await admin.from('game_decks').select('deck_state').eq('game_id', gameId).single()
+  const deckStateStr = deckRow?.deck_state ?? ''
+
+  const [deckPart, , lastRaisePart, lastRaiserPart] = deckStateStr.split('|')
   const deck = decodeDeck(deckPart ?? '')
   const lastRaiseAmount = parseInt(lastRaisePart ?? '0', 10) || (tableConfig?.big_blind ?? 20)
 

@@ -19,12 +19,12 @@ interface Props {
 const SEAT_POSITIONS = [
   { top: '88%', left: '50%' },   // Seat 1 — bottom center (me)
   { top: '78%', left: '18%' },   // Seat 2 — bottom left
-  { top: '50%', left: '3%' },    // Seat 3 — left middle
+  { top: '50%', left: '7%' },    // Seat 3 — left middle
   { top: '20%', left: '15%' },   // Seat 4 — top left
   { top: '8%',  left: '38%' },   // Seat 5 — top left-center
   { top: '8%',  left: '62%' },   // Seat 6 — top right-center
   { top: '20%', left: '85%' },   // Seat 7 — top right
-  { top: '50%', left: '97%' },   // Seat 8 — right middle
+  { top: '50%', left: '93%' },   // Seat 8 — right middle
   { top: '78%', left: '82%' },   // Seat 9 — bottom right
 ];
 
@@ -68,7 +68,7 @@ export function PokerTable({ gameState, seats, myUserId, hostId, onStartGame, ta
   })();
 
   return (
-    <div className="w-full max-w-4xl px-2 sm:px-8 lg:px-12 py-4 sm:py-8 lg:py-10">
+    <div className="w-full max-w-4xl px-1 sm:px-8 lg:px-12 py-3 sm:py-8 lg:py-10">
       {/* Outer wood rail */}
       <div
         className="relative w-full rounded-[50%] overflow-visible"

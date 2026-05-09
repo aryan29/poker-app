@@ -122,7 +122,7 @@ export function ActionPanel({ gameState, myUserId, onAction, isBB }: Props) {
 
   return (
     <div
-      className="flex flex-col gap-3 px-4 sm:px-6 py-4 rounded-2xl w-full max-w-lg"
+      className="flex flex-col gap-2 sm:gap-3 px-3 sm:px-6 py-3 sm:py-4 rounded-2xl w-full max-w-lg"
       style={{
         background: 'rgba(4,20,10,0.85)',
         border: '1px solid rgba(52,211,153,0.2)',
@@ -190,7 +190,7 @@ export function ActionPanel({ gameState, myUserId, onAction, isBB }: Props) {
       )}
 
       {/* Action buttons */}
-      <div className="flex gap-2 items-center">
+      <div className="flex gap-1.5 sm:gap-2 items-center">
         {/* Fold */}
         <ActionButton
           label="✕ Fold"
@@ -198,7 +198,7 @@ export function ActionPanel({ gameState, myUserId, onAction, isBB }: Props) {
           disabled={isPending}
           isLoading={pending === 'fold'}
           color="red"
-          className="flex-1 min-h-[46px]"
+          className="flex-1 min-h-[40px] sm:min-h-[46px]"
         />
 
         {/* Check or Call */}
@@ -209,7 +209,7 @@ export function ActionPanel({ gameState, myUserId, onAction, isBB }: Props) {
             disabled={isPending}
             isLoading={pending === 'check'}
             color="gray"
-            className="flex-1 min-h-[46px]"
+            className="flex-1 min-h-[40px] sm:min-h-[46px]"
           />
         ) : (
           <ActionButton
@@ -218,7 +218,7 @@ export function ActionPanel({ gameState, myUserId, onAction, isBB }: Props) {
             disabled={isPending}
             isLoading={pending === 'call'}
             color="blue"
-            className="flex-1 min-h-[46px]"
+            className="flex-1 min-h-[40px] sm:min-h-[46px]"
           />
         )}
 
@@ -230,14 +230,14 @@ export function ActionPanel({ gameState, myUserId, onAction, isBB }: Props) {
             disabled={isPending}
             isLoading={pending === 'all_in'}
             color="purple"
-            className="flex-1 min-h-[46px]"
+            className="flex-1 min-h-[40px] sm:min-h-[46px]"
           />
         )}
       </div>
 
       {/* Raise row */}
       {myStack > minRaise && (
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-1.5 sm:gap-2 items-center">
           <div
             className="flex-1 flex items-center rounded-xl overflow-hidden"
             style={{
@@ -266,7 +266,7 @@ export function ActionPanel({ gameState, myUserId, onAction, isBB }: Props) {
             disabled={isPending || !raiseAmount}
             isLoading={pending === 'raise'}
             color="green"
-            className="min-h-[46px]"
+            className="min-h-[40px] sm:min-h-[46px]"
           />
         </div>
       )}
@@ -374,7 +374,7 @@ function ActionButton({ label, onClick, disabled, isLoading, color, className = 
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`px-3 sm:px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ${className}`}
+      className={`px-2 sm:px-3 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ${className}`}
       style={{
         background: s.base,
         border: `1px solid ${s.border}`,

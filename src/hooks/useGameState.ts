@@ -15,7 +15,9 @@ export function useGameState(tableCode: string) {
   // Debounce: prevent concurrent duplicate fetches (Realtime fires multiple events per action)
   const fetchingRef = useRef(false);
   const pendingFetchRef = useRef(false);
-  const supabase = createClient();
+  // Stable client ref — createBrowserClient must not recreate on every render
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
 
   const fetchGameState = useCallback(async () => {
     // If a fetch is already in flight, mark that another one is needed and return
@@ -141,13 +143,13 @@ export function useGameState(tableCode: string) {
         fetchGameState();
       }
     }
-  }, [tableCode, supabase]);
+  }, [tableCode]);
 
   useEffect(() => {
     fetchGameState();
 
-    // Polling fallback every 6s — Realtime handles real-time updates; poll catches missed events
-    const pollInterval = setInterval(fetchGameState, 6000);
+    // Polling fallback every 15s — Realtime handles real-time updates; poll catches missed events
+    const pollInterval = setInterval(fetchGameState, 15000);
 
     const channel = supabase
       .channel(`table:${tableCode}`)
@@ -177,7 +179,7 @@ export function useGameState(tableCode: string) {
       clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
-  }, [tableCode, fetchGameState, supabase]);
+  }, [tableCode, fetchGameState]);
 
   const sendAction = useCallback(
     async (action: ActionType, amount?: number): Promise<{ winners: WinnerResult[]; losers: Array<{ userId: string; amount: number }>; playerCards: Record<string, string[]> } | null> => {

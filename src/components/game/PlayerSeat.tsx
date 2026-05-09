@@ -136,7 +136,7 @@ export function PlayerSeat({
 
       {/* Hole cards — fanned above avatar */}
       {showCards && (
-        <div className="relative flex items-end justify-center mb-0.5" style={{ height: 44, width: 52 }}>
+        <div className="relative flex items-end justify-center mb-0.5" style={{ height: 36, width: 44 }}>
           {(() => {
             const cards =
               revealedCards && revealedCards.length > 0
@@ -152,8 +152,8 @@ export function PlayerSeat({
                   className="absolute bottom-0 transition-all duration-300"
                   style={{
                     transform: `rotate(${(i - (cards.length - 1) / 2) * 8}deg) translateY(${i === 0 ? '2px' : '-2px'})`,
-                    left: i === 0 ? '2px' : 'auto',
-                    right: i === 1 ? '2px' : 'auto',
+                    left: i === 0 ? '1px' : 'auto',
+                    right: i === 1 ? '1px' : 'auto',
                     zIndex: i + 1,
                     filter: isCurrentPlayer ? 'drop-shadow(0 0 4px rgba(251,191,36,0.5))' : 'none',
                   }}
@@ -170,8 +170,8 @@ export function PlayerSeat({
                 className="absolute bottom-0"
                 style={{
                   transform: `rotate(${(i - 0.5) * 8}deg) translateY(${i === 0 ? '2px' : '-2px'})`,
-                  left: i === 0 ? '2px' : 'auto',
-                  right: i === 1 ? '2px' : 'auto',
+                  left: i === 0 ? '1px' : 'auto',
+                  right: i === 1 ? '1px' : 'auto',
                   zIndex: i + 1,
                 }}
               >
@@ -206,7 +206,7 @@ export function PlayerSeat({
 
       {/* Avatar */}
       <div
-        className="relative w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm text-white transition-all duration-300"
+        className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm text-white transition-all duration-300"
         style={{
           background: `linear-gradient(145deg, ${avatarColor}ee, ${avatarColor}88)`,
           border: isCurrentPlayer
@@ -241,7 +241,7 @@ export function PlayerSeat({
 
       {/* Player name + stack */}
       <div
-        className="flex flex-col items-center px-2 py-0.5 rounded-lg transition-all"
+        className="flex flex-col items-center px-1.5 sm:px-2 py-0.5 rounded-lg transition-all"
         style={{
           background: isCurrentPlayer ? 'rgba(251,191,36,0.08)' : 'rgba(0,0,0,0.55)',
           border: isCurrentPlayer
@@ -251,7 +251,7 @@ export function PlayerSeat({
         }}
       >
         <span
-          className={`text-xs font-semibold truncate max-w-[72px] ${
+          className={`text-xs font-semibold truncate max-w-[56px] sm:max-w-[72px] ${
             isMe ? 'text-emerald-300' : isCurrentPlayer ? 'text-yellow-200' : 'text-gray-200'
           }`}
         >

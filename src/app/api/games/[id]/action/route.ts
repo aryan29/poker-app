@@ -59,6 +59,10 @@ export async function POST(
     return NextResponse.json({ error: 'Game is already in showdown' }, { status: 409 })
   }
 
+  // Load deck state from private table (admin client to bypass RLS)
+  const { data: deckRow } = await admin.from('game_decks').select('deck_state').eq('game_id', gameId).single()
+  const deckStateStr = deckRow?.deck_state ?? ''
+
   // Load seats and hands to reconstruct game state — use admin to read ALL players' data (bypasses RLS)
   const [{ data: seats }, { data: hands }, { data: tableConfig }] = await Promise.all([
     admin.from('table_seats').select('*').eq('table_id', game.table_id).order('seat_number', { ascending: true }),
@@ -71,7 +75,7 @@ export async function POST(
   }
 
   // Reconstruct in-memory game state
-  const [deckPart, actorsPart, lastRaisePart, lastRaiserPart] = (game.deck_state ?? '').split('|')
+  const [deckPart, actorsPart, lastRaisePart, lastRaiserPart] = deckStateStr.split('|')
   const deck = decodeDeck(deckPart ?? '')
   const numActorsThisRound = parseInt(actorsPart ?? '0', 10) || 0
   const lastRaiseAmount = parseInt(lastRaisePart ?? '0', 10) || (tableConfig?.big_blind ?? 20)
@@ -164,8 +168,14 @@ export async function POST(
 
     await admin
       .from('games')
-      .update({ phase: 'showdown', pot: 0, round_pot: 0, side_pots: [], current_player_id: null, deck_state: serializeDeck(updatedState) })
+      .update({ phase: 'showdown', pot: 0, round_pot: 0, side_pots: [], current_player_id: null })
       .eq('id', gameId)
+
+    await admin.from('game_decks').upsert({
+      game_id: gameId,
+      deck_state: serializeDeck(updatedState),
+      updated_at: new Date().toISOString(),
+    })
 
     await admin.from('tables').update({ status: 'waiting' }).eq('id', game.table_id)
 
@@ -233,9 +243,14 @@ export async function POST(
           round_pot: 0,
           side_pots: [],
           current_player_id: null,
-          deck_state: serializeDeck(finalState),
         })
         .eq('id', gameId)
+
+      await admin.from('game_decks').upsert({
+        game_id: gameId,
+        deck_state: serializeDeck(finalState),
+        updated_at: new Date().toISOString(),
+      })
 
       await admin.from('tables').update({ status: 'waiting' }).eq('id', game.table_id)
 
@@ -289,9 +304,14 @@ export async function POST(
         side_pots: calculatePots(newState.players).length > 1 ? calculatePots(newState.players) : [],
         current_player_id: nextPlayer?.userId ?? null,
         current_bet: newState.currentBet,
-        deck_state: serializeDeck(newState),
       })
       .eq('id', gameId)
+
+    await admin.from('game_decks').upsert({
+      game_id: gameId,
+      deck_state: serializeDeck(newState),
+      updated_at: new Date().toISOString(),
+    })
 
     for (const p of newState.players) {
       await admin
@@ -330,9 +350,14 @@ export async function POST(
       side_pots: sidePots.length > 1 ? sidePots : [],
       current_player_id: nextPlayer?.userId ?? null,
       current_bet: updatedState.currentBet,
-      deck_state: serializeDeck(updatedState),
     })
     .eq('id', gameId)
+
+  await admin.from('game_decks').upsert({
+    game_id: gameId,
+    deck_state: serializeDeck(updatedState),
+    updated_at: new Date().toISOString(),
+  })
 
   return NextResponse.json({
     game: {

@@ -97,8 +97,8 @@ export function CommunityCards({ cards, phase, pot, roundPot, sidePots }: Props)
         </div>
       )}
 
-      {/* Cards row */}
-      <div className="flex gap-2 items-center">
+      {/* Cards row — scale down on small screens to fit 5 cards */}
+      <div className="flex gap-1 sm:gap-2 items-center">
         {Array.from({ length: 5 }).map((_, i) => {
           const revealed = i < visibleCount && cards[i];
           return (
@@ -109,7 +109,7 @@ export function CommunityCards({ cards, phase, pot, roundPot, sidePots }: Props)
               }`}
             >
               {revealed ? (
-                <Card card={cards[i]} size="md" />
+                <Card card={cards[i]} size="sm" />
               ) : (
                 <EmptySlot />
               )}
@@ -124,7 +124,7 @@ export function CommunityCards({ cards, phase, pot, roundPot, sidePots }: Props)
 function EmptySlot() {
   return (
     <div
-      className="w-12 h-[4.2rem] rounded-lg flex-shrink-0"
+      className="w-8 h-12 rounded-lg flex-shrink-0"
       style={{
         border: '2px dashed rgba(255,255,255,0.15)',
         background: 'rgba(0,0,0,0.2)',
