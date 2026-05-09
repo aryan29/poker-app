@@ -38,8 +38,16 @@ export async function GET() {
     .select('game_id, deck_state')
     .limit(20)
 
+  // Also probe hand_history — it has hole cards in player_results JSONB.
+  // After migration 008, this should return zero rows for non-service-role users.
+  const { data: hands, error: hErr } = await supabase
+    .from('hand_history')
+    .select('id, player_results')
+    .limit(20)
+
   return NextResponse.json({
     games: { rows: games ?? [], error: gErr?.message ?? null },
     game_decks: { rows: decks ?? [], error: dErr?.message ?? null },
+    hand_history: { rows: hands ?? [], error: hErr?.message ?? null },
   })
 }

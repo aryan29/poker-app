@@ -130,6 +130,10 @@ interface ProbeResponse {
     rows: Array<{ game_id: string; deck_state: string | null }>
     error: string | null
   }
+  hand_history?: {
+    rows: Array<{ id: string; player_results: Record<string, { holeCards?: string[] }> | null }>
+    error: string | null
+  }
 }
 
 async function probeDeck(page: Page): Promise<ProbeResponse> {
@@ -251,5 +255,33 @@ test.describe('Deck security — players cannot read future cards', () => {
       await ctx1.close()
       await ctx2.close()
     }
+  })
+
+  test('hand_history table cannot be read directly by signed-in users (hole cards stay private)', async ({
+    page,
+  }) => {
+    // hand_history.player_results contains hole cards for every player in
+    // every completed hand, including folded players who never revealed.
+    // Migration 008 dropped the public SELECT policy, so a user-context
+    // query must return zero rows. The /api/tables/[code]/history endpoint
+    // fetches via admin and filters per-requestor.
+    await ensureAccount(page, P1_EMAIL, 'APITester')
+    await signInPage(page, P1_EMAIL, PASSWORD)
+
+    const probe = await probeDeck(page)
+
+    // If any rows leak through, that's a critical hole-card leak.
+    for (const row of probe.hand_history?.rows ?? []) {
+      const results = (row.player_results ?? {}) as Record<string, { holeCards?: string[] }>
+      const leakedCards = Object.values(results)
+        .flatMap((r) => r.holeCards ?? [])
+        .filter((c) => typeof c === 'string' && c.length >= 2)
+      if (leakedCards.length > 0) {
+        throw new Error(
+          `SECURITY LEAK: hand_history exposed hole cards via direct DB query: ${leakedCards.slice(0, 6).join(',')}...`
+        )
+      }
+    }
+    expect((probe.hand_history?.rows ?? []).length).toBe(0)
   })
 })

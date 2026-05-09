@@ -179,8 +179,8 @@ export async function POST(
 
     await admin.from('tables').update({ status: 'waiting' }).eq('id', game.table_id)
 
-    // Write hand history — Path A (early fold)
-    const earlyFoldResults: Record<string, { holeCards: string[]; netChips: number; handRank: string | null }> = {}
+    // Write hand history — Path A (early fold, uncontested win — no one revealed)
+    const earlyFoldResults: Record<string, { holeCards: string[]; netChips: number; handRank: string | null; revealed: boolean }> = {}
     for (const p of updatedState.players) {
       const isWinner = result.winners.some((w: { userId: string }) => w.userId === p.userId)
       const winner = result.winners.find((w: { userId: string }) => w.userId === p.userId)
@@ -188,6 +188,8 @@ export async function POST(
         holeCards: p.holeCards.map((c) => c.code),
         netChips: isWinner ? (winner?.amount ?? 0) : -p.totalBet,
         handRank: isWinner ? (winner?.handResult?.rank ?? null) : null,
+        // Uncontested pot — winner doesn't show, folded players already mucked
+        revealed: false,
       }
     }
     await admin.from('hand_history').insert({
@@ -254,15 +256,17 @@ export async function POST(
 
       await admin.from('tables').update({ status: 'waiting' }).eq('id', game.table_id)
 
-      // Write hand history — Path B (full showdown)
+      // Write hand history — Path B (full showdown, non-folded players reveal)
       const winnerIds = new Set(winners.map((w) => w.userId))
-      const showdownResults: Record<string, { holeCards: string[]; netChips: number; handRank: string | null }> = {}
+      const showdownResults: Record<string, { holeCards: string[]; netChips: number; handRank: string | null; revealed: boolean }> = {}
       for (const p of finalState.players) {
         const winner = winners.find((w) => w.userId === p.userId)
         showdownResults[p.userId] = {
           holeCards: p.holeCards.map((c) => c.code),
           netChips: winner ? winner.amount : -p.totalBet,
           handRank: winner ? winner.handResult.rank : null,
+          // Only non-folded players showed cards at showdown
+          revealed: !p.isFolded,
         }
       }
       const totalPot = finalState.players.reduce((s, p) => s + p.totalBet, 0)
