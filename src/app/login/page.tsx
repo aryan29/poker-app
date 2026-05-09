@@ -38,6 +38,10 @@ export default function LoginPage() {
         })
         const json = await res.json()
         if (!res.ok) throw new Error(json.error ?? 'Failed to create account')
+        // The signup API signs in server-side, but the browser still needs its own
+        // session cookie — sign in here too so the lobby auth check passes.
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) throw error
         router.push('/lobby')
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
@@ -268,7 +272,7 @@ export default function LoginPage() {
 
           {mode === 'signup' && (
             <p className="text-center mt-4 text-xs" style={{ color: '#4a5c4e' }}>
-              You&apos;ll start with 10,000 chips. No real money involved.
+              You&apos;ll start with 1,000 chips. No real money involved.
             </p>
           )}
         </div>
