@@ -108,13 +108,18 @@ export async function GET(
     .filter((p) => !winnerIds.has(p.userId) && p.totalBet > 0)
     .map((p) => ({ userId: p.userId, amount: -p.totalBet }))
 
-  // Reveal hole cards for all non-folded players
+  // Reveal cards only when 2+ players actually reached showdown (real poker rule).
+  // Uncontested win → winner doesn't show.
+  const nonFolded = players.filter((p) => !p.isFolded)
+  const isUncontested = nonFolded.length < 2
   const playerCards: Record<string, string[]> = {}
-  players.forEach((p) => {
-    if (!p.isFolded && p.holeCards.length > 0) {
-      playerCards[p.userId] = p.holeCards.map((c) => c.code)
-    }
-  })
+  if (!isUncontested) {
+    nonFolded.forEach((p) => {
+      if (p.holeCards.length > 0) {
+        playerCards[p.userId] = p.holeCards.map((c) => c.code)
+      }
+    })
+  }
 
-  return NextResponse.json({ winners, losers, playerCards })
+  return NextResponse.json({ winners, losers, playerCards, uncontested: isUncontested })
 }

@@ -204,11 +204,7 @@ export async function POST(
     return NextResponse.json({ game: { ...game, phase: 'showdown' }, winners: result.winners, losers: (() => {
       const winnerIds = new Set(result.winners.map((w) => w.userId))
       return updatedState.players.filter((p) => !winnerIds.has(p.userId) && p.totalBet > 0).map((p) => ({ userId: p.userId, amount: -p.totalBet }))
-    })(), playerCards: (() => {
-      const cards: Record<string, string[]> = {}
-      updatedState.players.forEach((p) => { if (!p.isFolded) cards[p.userId] = p.holeCards.map((c) => c.code) })
-      return cards
-    })() })
+    })(), playerCards: {}, uncontested: true })
   }
 
   if (result.phaseComplete) {
@@ -258,6 +254,9 @@ export async function POST(
 
       // Write hand history — Path B (full showdown, non-folded players reveal)
       const winnerIds = new Set(winners.map((w) => w.userId))
+      // Only count as "true" showdown reveal if 2+ players were left non-folded
+      const showdownNonFolded = finalState.players.filter((p) => !p.isFolded)
+      const reachedShowdown = showdownNonFolded.length >= 2
       const showdownResults: Record<string, { holeCards: string[]; netChips: number; handRank: string | null; revealed: boolean }> = {}
       for (const p of finalState.players) {
         const winner = winners.find((w) => w.userId === p.userId)
@@ -265,8 +264,8 @@ export async function POST(
           holeCards: p.holeCards.map((c) => c.code),
           netChips: winner ? winner.amount : -p.totalBet,
           handRank: winner ? winner.handResult.rank : null,
-          // Only non-folded players showed cards at showdown
-          revealed: !p.isFolded,
+          // Only mark as revealed if there was an actual showdown
+          revealed: !p.isFolded && reachedShowdown,
         }
       }
       const totalPot = finalState.players.reduce((s, p) => s + p.totalBet, 0)
@@ -282,12 +281,18 @@ export async function POST(
         .filter((p) => !winnerIds.has(p.userId) && p.totalBet > 0)
         .map((p) => ({ userId: p.userId, amount: -p.totalBet }))
 
+      // Reveal cards only when 2+ players actually reached showdown (real poker rule).
+      // If only one player is non-folded, it's an uncontested win — winner doesn't show.
+      const nonFolded = finalState.players.filter((p) => !p.isFolded)
+      const isUncontested = nonFolded.length < 2
       const playerCards: Record<string, string[]> = {}
-      finalState.players.forEach((p) => {
-        if (!p.isFolded) playerCards[p.userId] = p.holeCards.map((c) => c.code)
-      })
+      if (!isUncontested) {
+        nonFolded.forEach((p) => {
+          playerCards[p.userId] = p.holeCards.map((c) => c.code)
+        })
+      }
 
-      return NextResponse.json({ game: { ...game, phase: 'showdown' }, winners, losers, playerCards })
+      return NextResponse.json({ game: { ...game, phase: 'showdown' }, winners, losers, playerCards, uncontested: isUncontested })
     }
 
     // Advance to next phase (flop/turn/river)

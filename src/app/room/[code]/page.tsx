@@ -197,6 +197,7 @@ export default function RoomPage() {
   const [handWinners, setHandWinners] = useState<WinnerResult[] | null>(null)
   const [handLosers, setHandLosers] = useState<Array<{ userId: string; amount: number }> | null>(null)
   const [handPlayerCards, setHandPlayerCards] = useState<Record<string, string[]> | null>(null)
+  const [handUncontested, setHandUncontested] = useState<boolean>(false)
   const [showdownTableCards, setShowdownTableCards] = useState<Record<string, string[]> | null>(null)
   const [showMobileChat, setShowMobileChat] = useState(false)
   const firstLoadDone = useRef(false)
@@ -212,6 +213,7 @@ export default function RoomPage() {
       setHandWinners(result.winners)
       setHandLosers(result.losers)
       setHandPlayerCards(result.playerCards)
+      setHandUncontested(result.uncontested)
       setShowdownTableCards(result.playerCards)
     }
   }
@@ -255,6 +257,7 @@ export default function RoomPage() {
             setHandWinners(result.winners)
             setHandLosers(result.losers)
             setHandPlayerCards(result.playerCards)
+            setHandUncontested(result.uncontested)
             setShowdownTableCards(result.playerCards)
           }
         })
@@ -553,12 +556,14 @@ export default function RoomPage() {
           winners={handWinners}
           losers={handLosers ?? []}
           playerCards={handPlayerCards ?? {}}
+          uncontested={handUncontested}
           seats={(seats as Array<{ user_id: string; profile: { display_name: string } }>)}
           isHost={!!(table && myProfile && table.host_id === myProfile.id)}
           onPlayAgain={async () => {
             setHandWinners(null)
             setHandLosers(null)
             setHandPlayerCards(null)
+            setHandUncontested(false)
             try {
               await startGame()
             } catch {
@@ -569,6 +574,7 @@ export default function RoomPage() {
             setHandWinners(null)
             setHandLosers(null)
             setHandPlayerCards(null)
+            setHandUncontested(false)
           }}
         />
       )}

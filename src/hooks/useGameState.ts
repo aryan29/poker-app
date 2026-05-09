@@ -182,7 +182,7 @@ export function useGameState(tableCode: string) {
   }, [tableCode, fetchGameState]);
 
   const sendAction = useCallback(
-    async (action: ActionType, amount?: number): Promise<{ winners: WinnerResult[]; losers: Array<{ userId: string; amount: number }>; playerCards: Record<string, string[]> } | null> => {
+    async (action: ActionType, amount?: number): Promise<{ winners: WinnerResult[]; losers: Array<{ userId: string; amount: number }>; playerCards: Record<string, string[]>; uncontested: boolean } | null> => {
       if (!gameState) throw new Error('No active game');
       let res: Response;
       try {
@@ -208,6 +208,7 @@ export function useGameState(tableCode: string) {
           winners: json.winners as WinnerResult[],
           losers: (json.losers ?? []) as Array<{ userId: string; amount: number }>,
           playerCards: (json.playerCards ?? {}) as Record<string, string[]>,
+          uncontested: !!json.uncontested,
         };
       }
 
@@ -218,7 +219,7 @@ export function useGameState(tableCode: string) {
     [gameState, fetchGameState]
   );
 
-  const fetchResult = useCallback(async (gameId: string): Promise<{ winners: WinnerResult[]; losers: Array<{ userId: string; amount: number }>; playerCards: Record<string, string[]> } | null> => {
+  const fetchResult = useCallback(async (gameId: string): Promise<{ winners: WinnerResult[]; losers: Array<{ userId: string; amount: number }>; playerCards: Record<string, string[]>; uncontested: boolean } | null> => {
     try {
       const res = await fetch(`/api/games/${gameId}/result`)
       if (!res.ok) return null
@@ -228,6 +229,7 @@ export function useGameState(tableCode: string) {
         winners: json.winners as WinnerResult[],
         losers: (json.losers ?? []) as Array<{ userId: string; amount: number }>,
         playerCards: (json.playerCards ?? {}) as Record<string, string[]>,
+        uncontested: !!json.uncontested,
       }
     } catch {
       return null

@@ -8,6 +8,9 @@ interface Props {
   winners: WinnerResult[];
   losers?: Array<{ userId: string; amount: number }>;
   playerCards?: Record<string, string[]>;
+  /** True when the hand was won uncontested (everyone else folded). Hides hand rank
+   *  and hole cards in the modal — real poker rule: winner doesn't have to show. */
+  uncontested?: boolean;
   seats: Array<{ user_id: string; profile: { display_name: string } }>;
   isHost: boolean;
   onPlayAgain: () => void;
@@ -31,6 +34,7 @@ export function GameResultModal({
   winners,
   losers = [],
   playerCards = {},
+  uncontested = false,
   seats,
   isHost,
   onPlayAgain,
@@ -123,19 +127,25 @@ export function GameResultModal({
                   <p className="font-bold text-white text-lg leading-tight truncate">
                     {name}
                   </p>
-                  <p className="text-yellow-400/70 text-sm">{handLabel}</p>
-                  {winner.handResult.description && (
-                    <p className="text-gray-500 text-xs mt-0.5 truncate">
-                      {winner.handResult.description}
-                    </p>
-                  )}
-                  {/* Hole cards */}
-                  {playerCards[winner.userId] && (
-                    <div className="flex gap-1 mt-1.5">
-                      {playerCards[winner.userId].map((code) => (
-                        <Card key={code} card={code} size="sm" />
-                      ))}
-                    </div>
+                  {uncontested ? (
+                    <p className="text-yellow-400/70 text-sm">Won uncontested</p>
+                  ) : (
+                    <>
+                      <p className="text-yellow-400/70 text-sm">{handLabel}</p>
+                      {winner.handResult.description && (
+                        <p className="text-gray-500 text-xs mt-0.5 truncate">
+                          {winner.handResult.description}
+                        </p>
+                      )}
+                      {/* Hole cards — only when there was an actual showdown */}
+                      {playerCards[winner.userId] && (
+                        <div className="flex gap-1 mt-1.5">
+                          {playerCards[winner.userId].map((code) => (
+                            <Card key={code} card={code} size="sm" />
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
